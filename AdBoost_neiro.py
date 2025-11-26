@@ -112,30 +112,43 @@ def generate_answer(message, promt, llm_cfg):
         "Authorization": f"Bearer {llm_cfg['api_token']}",
         "Content-Type": "application/json",
     }
+
     if llm_cfg.get("http_referer"):
         headers["HTTP-Referer"] = llm_cfg["http_referer"]
 
     payload = {
         "model": llm_cfg["model"],
-        "messages": [{"role": "user", "content": prompt_text}],
-        "max_tokens": llm_cfg.get("max_tokens", 220),
-        "temperature": llm_cfg.get("temperature", 0.6),
-        "top_p": llm_cfg.get("top_p", 0.9),
+        "messages": [
+            {"role": "system", "content": promt},
+            {"role": "user", "content": message}
+        ],
+        "max_tokens": llm_cfg["max_tokens"],
+        "temperature": llm_cfg["temperature"],
+        "top_p": llm_cfg["top_p"],
     }
 
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=30)
+
         if r.status_code != 200:
-            print(f"OpenRouter HTTP {r.status_code}: {r.text[:200]}...")
+            print(f"OpenRouter HTTP {r.status_code}: {r.text[:300]}")
             return "..."
+
         data = r.json()
-        content = (data.get("choices", [{}])[0].get("message", {}) or {}).get("content", "")
+
+        content = (
+            data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+        )
+
         return (content or "...").strip()
+
     except Exception as e:
         print(f"LLM error: {e}")
-
-        return "Извини зайка, я сейчас занята, отвечу чуть позже( P.S. это автоматический ответ от Telegram"
-
+        return ("Извини зайка, я сейчас занята, "
+                "отвечу чуть позже( "
+                "P.S. это автоматический ответ от Telegram")
 
 
 async def event_checker(client, name, llm_cfg):
