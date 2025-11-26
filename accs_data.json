@@ -8,5 +8,15 @@
     "temperature": 0.6,
     "top_p": 0.9,
     "http_referer": "http://localhost"
+  },
+  "limits": {
+    "hour_msg_limit": 20,
+    "history_limit": 10,
+    "answers_delay": 4,
+    "typing_delay": [300, 1200],
+
+    "rage_length": 3,
+    "rage_extend": 2,
+    "rage_max": 10
   }
 }

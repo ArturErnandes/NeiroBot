@@ -10,7 +10,7 @@ from datetime import datetime
 CONFIG_FILE = "accs_data.json"
 MAIN_PROMT_FILE = "main_promt.txt"
 PAIDED_PROMT_FILE = "paided_promt.txt"
-CREDS_FILE = "creds.txt"
+PAY_NUM_FILE = "pay_num_file.txt"
 SEEN_IDS_FILE = "ang_ids.json"
 PAIDED_USERS_FILE = "paided_users.json"
 HOUR_MESSAGES_LIMIT = 10
@@ -106,8 +106,9 @@ async def answer(client, name, answer_text, user):
         print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[ERROR]{Fore.RESET} Аккаунт {Fore.LIGHTRED_EX}{name}{Fore.RESET} Ошибка при ответе пользователю {user}: {e}")
 
 
-def generate_answer(message, promt, llm_cfg):
+def generate_answer(final_promt, llm_cfg):
     url = llm_cfg["api_base"].rstrip("/") + "/chat/completions"
+
     headers = {
         "Authorization": f"Bearer {llm_cfg['api_token']}",
         "Content-Type": "application/json",
@@ -119,8 +120,7 @@ def generate_answer(message, promt, llm_cfg):
     payload = {
         "model": llm_cfg["model"],
         "messages": [
-            {"role": "system", "content": promt},
-            {"role": "user", "content": message}
+            {"role": "user", "content": final_promt}
         ],
         "max_tokens": llm_cfg["max_tokens"],
         "temperature": llm_cfg["temperature"],
@@ -132,47 +132,75 @@ def generate_answer(message, promt, llm_cfg):
 
         if r.status_code != 200:
             print(f"OpenRouter HTTP {r.status_code}: {r.text[:300]}")
-            return "..."
+            return "Извини зайка, я сейчас занята, отвечу чуть позже\nP.S. это автоматический ответ от Telegram"
 
         data = r.json()
-
         content = (
             data.get("choices", [{}])[0]
                 .get("message", {})
                 .get("content", "")
         )
 
-        return (content or "...").strip()
+        return content.strip() if content else "..."
 
     except Exception as e:
         print(f"LLM error: {e}")
-        return ("Извини зайка, я сейчас занята, "
-                "отвечу чуть позже( "
-                "P.S. это автоматический ответ от Telegram")
+        return "Извини зайка, я сейчас занята, отвечу чуть позже\nP.S. это автоматический ответ от Telegram"
 
 
-async def event_checker(client, name, llm_cfg):
+async def answer_controller(client, name, llm_cfg, limits, user):
     main_promt = load_promt(MAIN_PROMT_FILE)
     paided_promt = load_promt(PAIDED_PROMT_FILE)
     paided_users = read_ids(PAIDED_USERS_FILE)
+    pay_number = load_promt(PAY_NUM_FILE)
     seen_users = read_ids(SEEN_IDS_FILE)
+    msg_limit = limits['hour_msg_limit']
 
+
+    chat_id = user.chat_id
+    if chat_id not in seen_users:
+        save_id(chat_id, SEEN_IDS_FILE)
+
+    msgs_list = []
+
+    async for msg in client.iter_messages(chat_id, limit=msg_limit):
+        if not msg.text:
+            continue
+
+        if msg.out:
+            msgs_list.append(("assistant", msg.text))
+        else:
+            msgs_list.append(("user", msg.text))
+
+    msgs_list.reverse()
+    msgs_text = ""
+
+    for role, text in msgs_list:
+        if role == "user":
+            msgs_text += f"Пользователь: {text}\n"
+        else:
+            msgs_text += f"Бот: {text}\n"
+
+    msgs_text = msgs_text.strip()
+
+    if chat_id in paided_users:
+        pass
+    else:
+        final_promt = f"{main_promt}\nПереписка с пользователем:\n{msgs_text}\nНомер для оплаты:\n{pay_number}"
+        answ = generate_answer(final_promt, llm_cfg)
+
+
+async def event_checker(client, name, llm_cfg, limits):
     @client.on(events.NewMessage())
     async def handler(event):
-        chat_id = event.chat_id
-        if event.is_private:
-            if chat_id not in seen_users:
-                save_id(chat_id, SEEN_IDS_FILE)
+        sender = await event.get_sender()
 
-            message = event.message.message
+        if event.is_private and not sender.bot:
+            await answer_controller(client, name, llm_cfg, limits, event)
 
-            if chat_id in paided_users:
-                answer = generate_answer(message, paided_promt, llm_cfg)
-            else:
-                answer = generate_answer(message, main_promt, llm_cfg)
         try:
             await client.run_until_disconnected()
-        except:
+        except Exception as e:
             warning = f"cyka blyat {name} ot'ebnul"
             print(warning)
             await asyncio.sleep(1000)
@@ -193,7 +221,7 @@ async def main():
         name = me.first_name
         print(f"{datetime.now().strftime('%H:%M:%S')}{Fore.GREEN} [SUCCESS] {Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET} подключен и готов к работе")
 
-        tasks.append(event_checker(client, name, data['llm']))
+        tasks.append(event_checker(client, name, data['llm'], data['limits']))
     await asyncio.gather(*tasks)
 
 
