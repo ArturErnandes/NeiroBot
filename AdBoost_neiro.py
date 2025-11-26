@@ -7,14 +7,14 @@ import asyncio
 import random
 from telethon import TelegramClient, events
 from datetime import datetime
+import time
 
 CONFIG_FILE = "accs_data.json"
 MAIN_PROMT_FILE = "main_promt.txt"
-PAIDED_PROMT_FILE = "paided_promt.txt"
 PAY_NUM_FILE = "pay_num_file.txt"
 SEEN_IDS_FILE = "ang_ids.json"
 PAIDED_USERS_FILE = "paided_users.json"
-HOUR_MESSAGES_LIMIT = 10
+USER_MSG_LOG = {}
 
 
 def load_promt(filename):
@@ -99,7 +99,7 @@ async def connect_client(number):
     return client
 
 
-async def answer(client, name, answer_text, user, limits):
+async def answer(client, name, answer_text, limits, user, user_name):
     answers_delay = limits["answers_delay"]
     typing_min, typing_max = limits["typing_delay"]
 
@@ -110,9 +110,10 @@ async def answer(client, name, answer_text, user, limits):
         await asyncio.sleep(typing_time)
     try:
         await client.send_message(user, answer_text)
-        print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[SUCCESS]{Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET}Успешно ответил пользователю {Fore.LIGHTBLUE_EX}{user}")
+
+        print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[SUCCESS]{Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET} Успешно ответил пользователю {Fore.LIGHTBLUE_EX}{user_name}")
     except Exception as e:
-        print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[ERROR]{Fore.RESET} Аккаунт {Fore.LIGHTRED_EX}{name}{Fore.RESET} Ошибка при ответе пользователю {user}: {e}")
+        print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[ERROR]{Fore.RESET} Аккаунт {Fore.LIGHTRED_EX}{name}{Fore.RESET} Ошибка при ответе пользователю {user_name}: {e}")
 
 
 def generate_answer(final_promt, llm_cfg):
@@ -157,18 +158,47 @@ def generate_answer(final_promt, llm_cfg):
         return "Извини зайка, я сейчас занята, отвечу чуть позже\nP.S. это автоматический ответ от Telegram"
 
 
-async def answer_controller(client, name, llm_cfg, limits, user):
-    main_promt = load_promt(MAIN_PROMT_FILE)
-    paided_promt = load_promt(PAIDED_PROMT_FILE)
+async def answer_controller(client, name, llm_cfg, limits, user, user_name, main_promt):
     paided_users = read_ids(PAIDED_USERS_FILE)
-    pay_number = load_promt(PAY_NUM_FILE)
     seen_users = read_ids(SEEN_IDS_FILE)
-    msg_limit = limits['hour_msg_limit']
-
+    pay_number = load_promt(PAY_NUM_FILE)
+    msg_limit = limits['history_limit']
 
     chat_id = user.chat_id
+    now = time.time()
+    hour_limit = limits["hour_msg_limit"]
+
+    timestamps = USER_MSG_LOG.get(chat_id, [])
+    timestamps = [ts for ts in timestamps if now - ts < 3600]
+
+    if len(timestamps) >= hour_limit:
+        print(f"{datetime.now().strftime('%H:%M:%S')}{Fore.YELLOW}[WARNING]{Fore.RESET} Лимит сообщений превышён у пользователя {Fore.LIGHTBLUE_EX}{user_name}")
+        USER_MSG_LOG[chat_id] = timestamps
+        return
+
+    timestamps.append(now)
+    USER_MSG_LOG[chat_id] = timestamps
+
     if chat_id not in seen_users:
         save_id(chat_id, SEEN_IDS_FILE)
+
+    if chat_id in paided_users:
+       #answ = "Извини зайка, я сейчас занята, отвечу чуть позже\nP.S. это автоматический ответ от Telegram"
+       #await answer(client, name, answ, limits, chat_id, user_name)
+        return
+
+    if user.photo or (user.document and user.document.mime_type in ["image/jpeg", "image/png", "application/pdf"]):
+        save_id(chat_id, PAIDED_USERS_FILE)
+        try:
+            await client.edit_folder(chat_id, folder=1)
+            print(f"{datetime.now().strftime('%H:%M:%S')}{Fore.GREEN} [SUCCESS] {Fore.RESET} Пользователь {user_name} добавлен в архив")
+
+        except Exception as e:
+            print(f"Ошибка при архивировании чата {user_name}: {e}")
+
+        answ = "Спасибо, котик) Фотография получена! Скоро проверю и добавлю тебя в приваточку"
+        await answer(client, name, answ, limits, chat_id, user_name)
+        return
 
     msgs_list = []
 
@@ -191,28 +221,27 @@ async def answer_controller(client, name, llm_cfg, limits, user):
             msgs_text += f"Бот: {text}\n"
 
     msgs_text = msgs_text.strip()
+    final_promt = f"{main_promt}\nПереписка с пользователем:\n{msgs_text}\nНомер для оплаты:\n{pay_number}"
+    answ = generate_answer(final_promt, llm_cfg)
 
-    if chat_id in paided_users:
-        pass
-    else:
-        final_promt = f"{main_promt}\nПереписка с пользователем:\n{msgs_text}\nНомер для оплаты:\n{pay_number}"
-        answ = generate_answer(final_promt, llm_cfg)
+    await answer(client, name, answ, limits, chat_id, user_name)
 
 
-async def event_checker(client, name, llm_cfg, limits):
+async def event_checker(client, name, llm_cfg, limits, main_promt):
     @client.on(events.NewMessage())
     async def handler(event):
         sender = await event.get_sender()
-
+        user_name = sender.first_name or sender.username or str(sender.id)
         if event.is_private and not sender.bot:
-            await answer_controller(client, name, llm_cfg, limits, event)
+            print(f"{datetime.now().strftime('%H:%M:%S')}{Fore.WHITE} [INFO] {Fore.RESET} На аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET} написал пользователь {Fore.LIGHTBLUE_EX}{user_name}")
+            await answer_controller(client, name, llm_cfg, limits, event, user_name, main_promt)
 
-        try:
-            await client.run_until_disconnected()
-        except Exception as e:
-            warning = f"cyka blyat {name} ot'ebnul"
-            print(warning)
-            await asyncio.sleep(1000)
+    try:
+        await client.run_until_disconnected()
+    except Exception as e:
+        warning = f"cyka blyat {name} ot'ebnul {e}"
+        print(warning)
+        await asyncio.sleep(1000)
 
 
 async def main():
@@ -229,8 +258,9 @@ async def main():
         me = await client.get_me()
         name = me.first_name
         print(f"{datetime.now().strftime('%H:%M:%S')}{Fore.GREEN} [SUCCESS] {Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET} подключен и готов к работе")
+        main_promt = load_promt(MAIN_PROMT_FILE)
 
-        tasks.append(event_checker(client, name, data['llm'], data['limits']))
+        tasks.append(event_checker(client, name, data['llm'], data['limits'], main_promt))
     await asyncio.gather(*tasks)
 
 
