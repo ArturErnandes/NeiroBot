@@ -4,6 +4,7 @@ from colorama import Fore, init
 import requests
 import json
 import asyncio
+import random
 from telethon import TelegramClient, events
 from datetime import datetime
 
@@ -98,7 +99,15 @@ async def connect_client(number):
     return client
 
 
-async def answer(client, name, answer_text, user):
+async def answer(client, name, answer_text, user, limits):
+    answers_delay = limits["answers_delay"]
+    typing_min, typing_max = limits["typing_delay"]
+
+    await asyncio.sleep(answers_delay)
+
+    async with client.action(user, "typing"):
+        typing_time = random.randint(typing_min, typing_max) / 1000
+        await asyncio.sleep(typing_time)
     try:
         await client.send_message(user, answer_text)
         print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[SUCCESS]{Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET}Успешно ответил пользователю {Fore.LIGHTBLUE_EX}{user}")

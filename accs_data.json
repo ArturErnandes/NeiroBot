@@ -2,7 +2,7 @@
   "numbers": [],
   "llm": {
     "api_base": "https://openrouter.ai/api/v1",
-    "api_token": "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",
+    "api_token": "token",
     "model": "google/gemma-3-4b-it",
     "max_tokens": 220,
     "temperature": 0.6,
@@ -12,11 +12,7 @@
   "limits": {
     "hour_msg_limit": 20,
     "history_limit": 10,
-    "answers_delay": 4,
-    "typing_delay": [300, 1200],
-
-    "rage_length": 3,
-    "rage_extend": 2,
-    "rage_max": 10
+    "answers_delay": 10,
+    "typing_delay": [1000, 3000]
   }
 }
