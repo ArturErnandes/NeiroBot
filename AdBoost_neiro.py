@@ -20,13 +20,14 @@ USER_MSG_LOG = {}
 def load_promt(filename):
     with open(filename, 'r', encoding="utf-8-sig") as f:
         promt = f.read()
+        f.close()
     return promt
 
 
 def read_ids(filename):
     with open(filename, 'r', encoding="utf-8-sig") as f:
         data = json.load(f)
-
+        f.close()
     return [int(x) for x in data]
 
 
