@@ -1,13 +1,17 @@
+import os
+
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from dotenv import load_dotenv
 
-TOKEN = "YOUR_BOT_TOKEN"
 
 PAY_NUM_FILE = "pay_num_file.txt"
+load_dotenv()
 
-admins = [123456789, 987654321]
+admins = [5354134749, 6524917951]
 
-bot = telebot.TeleBot(TOKEN)
+token = os.getenv("TOKEN")
+bot = telebot.TeleBot(token)
 
 waiting_for_new_number = {}
 
