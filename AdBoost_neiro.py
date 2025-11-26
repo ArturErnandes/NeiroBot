@@ -38,7 +38,7 @@ def save_id(user_id, filename):
 
 async def connect_client(number):
     json_file = f"{number}.json"
-    session_name = number
+    session_name = str(number)
     if os.path.exists(json_file):
         with open(json_file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
@@ -111,7 +111,7 @@ async def answer(client, name, answer_text, limits, user, user_name):
     try:
         await client.send_message(user, answer_text)
 
-        print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[SUCCESS]{Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET} Успешно ответил пользователю {Fore.LIGHTBLUE_EX}{user_name}")
+        print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.GREEN}[SUCCESS]{Fore.RESET} Аккаунт {Fore.LIGHTBLUE_EX}{name}{Fore.RESET} Успешно ответил пользователю {Fore.LIGHTBLUE_EX}{user_name}")
     except Exception as e:
         print(f"{datetime.now().strftime('%H:%M:%S')} {Fore.LIGHTRED_EX}[ERROR]{Fore.RESET} Аккаунт {Fore.LIGHTRED_EX}{name}{Fore.RESET} Ошибка при ответе пользователю {user_name}: {e}")
 
@@ -221,6 +221,7 @@ async def answer_controller(client, name, llm_cfg, limits, user, user_name, main
             msgs_text += f"Бот: {text}\n"
 
     msgs_text = msgs_text.strip()
+    print(msgs_text)
     final_promt = f"{main_promt}\nПереписка с пользователем:\n{msgs_text}\nНомер для оплаты:\n{pay_number}"
     answ = generate_answer(final_promt, llm_cfg)
 
@@ -239,7 +240,7 @@ async def event_checker(client, name, llm_cfg, limits, main_promt):
     try:
         await client.run_until_disconnected()
     except Exception as e:
-        warning = f"cyka blyat {name} ot'ebnul {e}"
+        warning = f"cyka blyat {name} ot'ebnul: {e}"
         print(warning)
         await asyncio.sleep(1000)
 
