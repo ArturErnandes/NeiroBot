@@ -25,15 +25,20 @@ def load_promt(filename):
 
 def read_ids(filename):
     with open(filename, 'r', encoding="utf-8-sig") as f:
-        ids = [int(row.strip()) for row in f]
-    f.close()
-    return ids
+        data = json.load(f)
+
+    return [int(x) for x in data]
 
 
 def save_id(user_id, filename):
-    with open(filename, 'a', encoding="utf-8") as f:
-        f.write(f'{user_id}\n')
-    f.close()
+    ids = read_ids(filename)
+
+    if user_id not in ids:
+        ids.append(user_id)
+
+    with open(filename, 'w', encoding="utf-8") as f:
+        json.dump(ids, f, ensure_ascii=False, indent=2)
+
 
 
 async def connect_client(number):
