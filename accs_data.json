@@ -1,0 +1,12 @@
+{
+  "numbers": [],
+  "llm": {
+    "api_base": "https://openrouter.ai/api/v1",
+    "api_token": "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",
+    "model": "google/gemma-3-4b-it",
+    "max_tokens": 220,
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "http_referer": "http://localhost"
+  }
+}
